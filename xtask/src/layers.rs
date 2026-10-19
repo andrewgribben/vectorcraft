@@ -58,6 +58,8 @@ pub const TABLE: &[(&str, Class)] = &[
     ("xtask", Class::Exempt),
     // Crates added later (append-only).
     ("cad", Class::Layer(3)),
+    ("fcm", Class::Layer(3)),
+    ("fcm-core", Class::Standalone),
     ("eps", Class::Layer(3)),
     ("metafile", Class::Layer(3)),
     ("plugins", Class::Layer(2)),

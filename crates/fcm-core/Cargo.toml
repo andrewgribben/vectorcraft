@@ -1,0 +1,9 @@
+[package]
+name = "vectorcraft-fcm-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Reader, writer and builder for Brother ScanNCut .fcm cutting files"
+
+[lints]
+workspace = true

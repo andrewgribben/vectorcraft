@@ -30,6 +30,7 @@ vectorcraft-svg = { workspace = true }
 vectorcraft-format = { workspace = true }
 vectorcraft-pdf = { workspace = true }
 vectorcraft-cad = { workspace = true }
+vectorcraft-fcm = { workspace = true }
 vectorcraft-eps = { workspace = true }
 vectorcraft-metafile = { workspace = true }
 vectorcraft-plugins = { workspace = true }

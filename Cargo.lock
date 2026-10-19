@@ -4676,6 +4676,7 @@ dependencies = [
  "vectorcraft-color",
  "vectorcraft-doc",
  "vectorcraft-eps",
+ "vectorcraft-fcm",
  "vectorcraft-format",
  "vectorcraft-geom",
  "vectorcraft-metafile",
@@ -4714,6 +4715,22 @@ dependencies = [
  "vectorcraft-testkit",
  "vectorcraft-text",
 ]
+
+[[package]]
+name = "vectorcraft-fcm"
+version = "0.13.1"
+dependencies = [
+ "kurbo 0.13.1",
+ "serde_json",
+ "vectorcraft-doc",
+ "vectorcraft-effects",
+ "vectorcraft-fcm-core",
+ "vectorcraft-geom",
+]
+
+[[package]]
+name = "vectorcraft-fcm-core"
+version = "0.13.1"
 
 [[package]]
 name = "vectorcraft-format"

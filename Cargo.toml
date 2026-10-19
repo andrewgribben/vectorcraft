@@ -37,6 +37,8 @@ vectorcraft-ui-egui = { path = "crates/ui-egui" }
 vectorcraft-mcp = { path = "crates/mcp" }
 vectorcraft-testkit = { path = "crates/testkit" }
 vectorcraft-cad = { path = "crates/cad" }
+vectorcraft-fcm = { path = "crates/fcm" }
+vectorcraft-fcm-core = { path = "crates/fcm-core" }
 vectorcraft-eps = { path = "crates/eps" }
 vectorcraft-metafile = { path = "crates/metafile" }
 vectorcraft-plugins = { path = "crates/plugins" }

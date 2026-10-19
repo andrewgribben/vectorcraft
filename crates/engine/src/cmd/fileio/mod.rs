@@ -29,6 +29,7 @@ pub mod dxfimport;
 mod encode;
 pub mod eps;
 mod export;
+mod fcm;
 pub(crate) mod imagemap;
 mod legacy_ai;
 mod load;
@@ -232,6 +233,7 @@ pub fn specs() -> Vec<CommandSpec> {
     ]
     .into_iter()
     .chain(save::specs())
+    .chain(fcm::specs())
     .collect()
 }
 
@@ -635,6 +637,16 @@ pub const FORMATS: &[Format] = &[
     Format { id: "png8", label: "PNG-8", extensions: &["png"], mime: "image/png", read: false, write: true, raster: true, options: PALETTE_OPTIONS },
     Format { id: "txt", label: "Text", extensions: TEXT_EXTS, mime: "text/plain", read: false, write: true, raster: false, options: text::OPTIONS },
     Format { id: "dxf", label: "DXF", extensions: &["dxf"], mime: "image/vnd.dxf", read: true, write: true, raster: false, options: dxf::OPTIONS },
+    Format {
+        id: "fcm",
+        label: "ScanNCut FCM",
+        extensions: &["fcm"],
+        mime: "application/x-brother-fcm",
+        read: false,
+        write: true,
+        raster: false,
+        options: fcm::OPTIONS,
+    },
     Format {
         id: "eps",
         label: "EPS",
@@ -1355,6 +1367,8 @@ mod tests_text;
 
 #[cfg(test)]
 mod tests_dxf;
+#[cfg(test)]
+mod tests_fcm;
 
 #[cfg(test)]
 mod tests_pdfsecurity;

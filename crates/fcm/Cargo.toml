@@ -1,0 +1,19 @@
+[package]
+name = "vectorcraft-fcm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "VectorCraft export to Brother ScanNCut .fcm cutting files"
+
+[lints]
+workspace = true
+
+[dependencies]
+vectorcraft-geom = { workspace = true }
+vectorcraft-doc = { workspace = true }
+vectorcraft-effects = { workspace = true }
+kurbo = { workspace = true }
+vectorcraft-fcm-core = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
