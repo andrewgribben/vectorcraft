@@ -38,15 +38,26 @@ pub(super) fn encode(doc: &vectorcraft_doc::Document, p: &Value) -> Result<Encod
 }
 
 pub fn specs() -> Vec<CommandSpec> {
-    vec![cmd!(
-        "document.sendToCutter",
-        "Send to ScanNCut",
-        [],
-        None,
-        "{volume?: \"/Volumes/NO NAME\" (the cutter's drive; default: found among the mounted drives), name?: file name without extension (default: the document's), …document.export options for fcm} → {path, bytes, warnings, volume}; writes the cutting file straight onto the machine's USB drive, where the machine's own screen picks it up. Same as document.export {format: fcm, path} with the drive found for you",
-        has_doc,
-        send_to_cutter
-    )]
+    vec![
+        cmd!(
+            "document.placeMatScan",
+            "Place Mat Scan",
+            [],
+            None,
+            "{path (the scan JPEG the machine saved to USB, IMG/000001.jpg), profile?: {pxPerMmX, pxPerMmY, originPxX, originPxY} (this machine's scan calibration; default: the measured CM900 one), matWidthMm?: 296.67, matHeightMm?: 298.8, resizeArtboard?: true (artboard 1 becomes the mat, top-left at 0, 0)} → {id, layer, xMm, yMm, widthMm, heightMm}; places the scan on a locked template layer \"Mat scan\" so that a point in the picture lies at the same position on the artboard as on the mat. Template layers are not exported to the cutter, so your art lines up with what is on the mat. No path: error",
+            has_doc,
+            place_mat_scan
+        ),
+        cmd!(
+            "document.sendToCutter",
+            "Send to ScanNCut",
+            [],
+            None,
+            "{volume?: \"/Volumes/NO NAME\" (the cutter's drive; default: found among the mounted drives), name?: file name without extension (default: the document's), …document.export options for fcm} → {path, bytes, warnings, volume}; writes the cutting file straight onto the machine's USB drive, where the machine's own screen picks it up. Same as document.export {format: fcm, path} with the drive found for you",
+            has_doc,
+            send_to_cutter
+        ),
+    ]
 }
 
 /// The drive names a ScanNCut presents (lower case).
@@ -113,4 +124,67 @@ fn send_to_cutter(s: &mut Session, p: &Value) -> Result<Value> {
     let mut r = super::export::export(s, &q)?;
     r["volume"] = json!(volume.to_string_lossy());
     Ok(r)
+}
+
+/// A finite number param, or `default`.
+fn num(c: &str, p: &Value, key: &str, default: f64) -> Result<f64> {
+    match p.get(key) {
+        None | Some(Value::Null) => Ok(default),
+        Some(v) => v.as_f64().filter(|n| n.is_finite()).ok_or_else(|| bad(c, format!("{key} must be a number"))),
+    }
+}
+
+fn profile(c: &str, p: &Value) -> Result<vectorcraft_fcm::scan::MatScanProfile> {
+    let d = vectorcraft_fcm::scan::MatScanProfile::default();
+    let prof = match p.get("profile") {
+        None | Some(Value::Null) => d,
+        Some(v) if v.is_object() => vectorcraft_fcm::scan::MatScanProfile {
+            px_per_mm_x: num(c, v, "pxPerMmX", d.px_per_mm_x)?,
+            px_per_mm_y: num(c, v, "pxPerMmY", d.px_per_mm_y)?,
+            origin_px_x: num(c, v, "originPxX", d.origin_px_x)?,
+            origin_px_y: num(c, v, "originPxY", d.origin_px_y)?,
+        },
+        Some(_) => return Err(bad(c, "profile must be an object")),
+    };
+    prof.validate().map_err(|e| bad(c, e))?;
+    Ok(prof)
+}
+
+fn place_mat_scan(s: &mut Session, p: &Value) -> Result<Value> {
+    use vectorcraft_fcm::scan::MM_PER_PT;
+    let c = "document.placeMatScan";
+    let path = str_param(p, "path").ok_or_else(|| bad(c, "path: the scan JPEG the machine saved to USB"))?;
+    let prof = profile(c, p)?;
+    let mat = (num(c, p, "matWidthMm", 296.67)?, num(c, p, "matHeightMm", 298.8)?);
+    if !(mat.0 > 0.0 && mat.1 > 0.0 && mat.0 <= 2000.0 && mat.1 <= 2000.0) {
+        return Err(bad(c, "matWidthMm/matHeightMm must be positive numbers up to 2000"));
+    }
+    let pt = |mm: f64| mm / MM_PER_PT;
+    if p.get("resizeArtboard").and_then(Value::as_bool).unwrap_or(true) {
+        s.execute("artboard.setProps", &json!({"index": 0, "x": 0, "y": 0, "width": pt(mat.0), "height": pt(mat.1)}))?;
+    }
+    let artboard = s.doc()?.doc.artboards.first().map(|a| a.rect).ok_or_else(|| bad(c, "the document has no artboard"))?;
+    // Its own layer, unlocked until the picture is in place, then a template (locked, not exported).
+    let layer = s.execute("layer.new", &json!({"name": "Mat scan", "top": false}))?;
+    let placed = s.execute("file.place", &json!({"path": path, "x": artboard.x0, "y": artboard.y0}))?;
+    let id = placed["ids"].as_array().and_then(|a| a.first()).and_then(Value::as_u64).ok_or_else(|| bad(c, "the scan was not placed"))?;
+    let (w_px, h_px) = match s.doc()?.doc.node(vectorcraft_doc::NodeId(id)).map(|n| &n.kind) {
+        Some(vectorcraft_doc::NodeKind::Image(img)) => (img.width, img.height),
+        _ => return Err(bad(c, "the placed file is not a picture")),
+    };
+    let b = prof.placement(w_px, h_px);
+    s.execute("select.set", &json!({"ids": [id]}))?;
+    s.execute(
+        "object.setBounds",
+        &json!({
+            "x": artboard.x0 + pt(b.x_mm),
+            "y": artboard.y0 + pt(b.y_mm),
+            "width": pt(b.width_mm),
+            "height": pt(b.height_mm),
+            "reference": 0,
+            "proportional": false,
+        }),
+    )?;
+    s.execute("layer.setProps", &json!({"id": layer["id"], "template": true}))?;
+    Ok(json!({"id": id, "layer": layer["id"], "xMm": b.x_mm, "yMm": b.y_mm, "widthMm": b.width_mm, "heightMm": b.height_mm}))
 }

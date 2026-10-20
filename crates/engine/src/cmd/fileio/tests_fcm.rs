@@ -94,3 +94,55 @@ fn finds_a_drive_named_no_name_under_the_mount_roots() {
     assert_eq!(super::fcm::find_machine_volume(std::slice::from_ref(&root)), Some(root.join("NO NAME")));
     std::fs::remove_dir_all(&root).ok();
 }
+
+/// A flat grey PNG of the given size, written to a temp file.
+fn grey_png(name: &str, w: u32, h: u32) -> std::path::PathBuf {
+    let path = std::env::temp_dir().join(format!("vc-matscan-{}-{name}.png", std::process::id()));
+    image::RgbImage::from_pixel(w, h, image::Rgb([200, 200, 200])).save(&path).unwrap();
+    path
+}
+
+#[test]
+fn a_mat_scan_lands_at_mat_coordinates_on_a_locked_template_layer() {
+    let mm = 72.0 / 25.4;
+    let png = grey_png("a", 600, 800);
+    let mut s = Session::new();
+    s.execute("file.new", &json!({"width": 100.0, "height": 100.0})).unwrap();
+    let prof = json!({"pxPerMmX": 10.0, "pxPerMmY": 20.0, "originPxX": -5.0, "originPxY": -10.0});
+    let r = s.execute("document.placeMatScan", &json!({"path": png.to_string_lossy(), "profile": prof})).unwrap();
+    // 600 px at 10 px/mm = 60 mm wide, 800 px at 20 px/mm = 40 mm tall; first pixel at (0.5, 0.5) mm
+    assert!((r["widthMm"].as_f64().unwrap() - 60.0).abs() < 1e-9 && (r["heightMm"].as_f64().unwrap() - 40.0).abs() < 1e-9);
+    let st = s.doc().unwrap();
+    let ab = st.doc.artboards[0].rect;
+    assert!((ab.width() / mm - 296.67).abs() < 0.01 && (ab.height() / mm - 298.8).abs() < 0.01, "artboard is the mat");
+    let b = st.doc.node(vectorcraft_doc::NodeId(r["id"].as_u64().unwrap())).unwrap().visual_bounds().unwrap();
+    assert!(((b.x0 - ab.x0) / mm - 0.5).abs() < 0.01 && ((b.y0 - ab.y0) / mm - 0.5).abs() < 0.01, "{b:?}");
+    assert!((b.width() / mm - 60.0).abs() < 0.01 && (b.height() / mm - 40.0).abs() < 0.01, "{b:?}");
+    let layer = st.doc.layers.iter().find(|l| l.name.as_deref() == Some("Mat scan")).expect("Mat scan layer");
+    assert!(matches!(layer.kind, vectorcraft_doc::NodeKind::Layer { template: true, .. }));
+    std::fs::remove_file(png).ok();
+}
+
+#[test]
+fn a_mat_scan_layer_is_not_exported_to_the_cutter() {
+    let png = grey_png("b", 200, 200);
+    let mut s = session();
+    s.execute("document.placeMatScan", &json!({"path": png.to_string_lossy(), "resizeArtboard": false})).unwrap();
+    let r = export(&mut s, json!({})).unwrap();
+    let f = vectorcraft_fcm::fcm_core::parse(&b64(&r)).unwrap();
+    assert_eq!(f.pieces.len(), 1, "only the rectangle is cut");
+    std::fs::remove_file(png).ok();
+}
+
+#[test]
+fn a_mat_scan_rejects_bad_input() {
+    let png = grey_png("c", 50, 50);
+    let mut s = session();
+    let p = png.to_string_lossy().to_string();
+    assert!(s.execute("document.placeMatScan", &json!({})).is_err(), "no path");
+    assert!(s.execute("document.placeMatScan", &json!({"path": p, "profile": {"pxPerMmX": 0}})).is_err());
+    assert!(s.execute("document.placeMatScan", &json!({"path": p, "profile": "x"})).is_err());
+    assert!(s.execute("document.placeMatScan", &json!({"path": p, "matWidthMm": -3})).is_err());
+    assert!(s.execute("document.placeMatScan", &json!({"path": "/no/such/scan.jpg"})).is_err());
+    std::fs::remove_file(png).ok();
+}

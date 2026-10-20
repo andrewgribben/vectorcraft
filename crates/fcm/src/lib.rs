@@ -7,6 +7,8 @@
 use fcm_core::build::{Contour, Design, PieceSpec, Seg, Tool};
 use kurbo::{BezPath, PathEl, Rect};
 use vectorcraft_doc::{Document, Node, NodeKind};
+pub mod scan;
+
 pub use vectorcraft_fcm_core as fcm_core;
 
 /// Millimetres per document point.
