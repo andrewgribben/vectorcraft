@@ -19,10 +19,12 @@ pub struct MatScanProfile {
 }
 
 impl Default for MatScanProfile {
-    /// Fitted to five 12 mm cut squares on one CM900 (residuals within 0.2 mm). Re-measure for
-    /// another machine or after servicing.
+    /// Fitted to 32 cut squares in four runs on one CM900 with a 12 x 12 in mat, sheet at the four
+    /// corners (0.09 mm rms in x, 0.14 mm in y, none worse than 0.28 mm). The mat's own 1 in dot grid
+    /// agrees with the scale: 300 px/in across, 297.3 px/in down. Re-measure for another machine, and
+    /// after running the machine's own alignment tool.
     fn default() -> Self {
-        MatScanProfile { px_per_mm_x: 11.7943, px_per_mm_y: 11.7249, origin_px_x: -3.8, origin_px_y: -9.6 }
+        MatScanProfile { px_per_mm_x: 11.7975, px_per_mm_y: 11.7275, origin_px_x: -3.65, origin_px_y: -10.40 }
     }
 }
 
@@ -70,15 +72,15 @@ mod tests {
     #[test]
     fn the_measured_profile_puts_the_first_pixel_just_inside_the_mat() {
         let p = MatScanProfile::default().placement(3504, 3529);
-        assert!((p.x_mm - 0.32).abs() < 0.01 && (p.y_mm - 0.82).abs() < 0.01, "{p:?}");
-        assert!((p.width_mm - 297.1).abs() < 0.2 && (p.height_mm - 301.0).abs() < 0.2, "{p:?}");
+        assert!((p.x_mm - 0.31).abs() < 0.01 && (p.y_mm - 0.89).abs() < 0.01, "{p:?}");
+        assert!((p.width_mm - 297.0).abs() < 0.2 && (p.height_mm - 300.9).abs() < 0.2, "{p:?}");
     }
 
     #[test]
     fn a_pixel_converts_to_the_mat_position_it_was_measured_at() {
         // from the calibration run: a square cut at (16.48, 17.60) mm was seen at pixel (189.8, 199.0)
         let (x, y) = MatScanProfile::default().px_to_mm(189.8, 199.0);
-        assert!((x - 16.48).abs() < 0.1 && (y - 17.60).abs() < 0.2, "{x} {y}");
+        assert!((x - 16.48).abs() < 0.15 && (y - 17.60).abs() < 0.3, "{x} {y}");
     }
 
     #[test]

@@ -44,7 +44,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Place Mat Scan",
             [],
             None,
-            "{path (the scan JPEG the machine saved to USB, IMG/000001.jpg), profile?: {pxPerMmX, pxPerMmY, originPxX, originPxY} (this machine's scan calibration; default: the measured CM900 one), matWidthMm?: 296.67, matHeightMm?: 298.8, resizeArtboard?: true (artboard 1 becomes the mat, top-left at 0, 0)} → {id, layer, xMm, yMm, widthMm, heightMm}; places the scan on a locked template layer \"Mat scan\" so that a point in the picture lies at the same position on the artboard as on the mat. Template layers are not exported to the cutter, so your art lines up with what is on the mat. No path: error",
+            "{path (the scan JPEG the machine saved to USB, IMG/000001.jpg), profile?: {pxPerMmX, pxPerMmY, originPxX, originPxY} (this machine's scan calibration; default: the measured CM900 one), matWidthMm?: 304.8, matHeightMm?: 304.8 (the Brother 12 x 12 in mat), resizeArtboard?: true (artboard 1 becomes the mat, top-left at 0, 0)} → {id, layer, xMm, yMm, widthMm, heightMm}; places the scan on a locked template layer \"Mat scan\" so that a point in the picture lies at the same position on the artboard as on the mat. Template layers are not exported to the cutter, so your art lines up with what is on the mat. No path: error",
             has_doc,
             place_mat_scan
         ),
@@ -155,7 +155,7 @@ fn place_mat_scan(s: &mut Session, p: &Value) -> Result<Value> {
     let c = "document.placeMatScan";
     let path = str_param(p, "path").ok_or_else(|| bad(c, "path: the scan JPEG the machine saved to USB"))?;
     let prof = profile(c, p)?;
-    let mat = (num(c, p, "matWidthMm", 296.67)?, num(c, p, "matHeightMm", 298.8)?);
+    let mat = (num(c, p, "matWidthMm", 304.8)?, num(c, p, "matHeightMm", 304.8)?);
     if !(mat.0 > 0.0 && mat.1 > 0.0 && mat.0 <= 2000.0 && mat.1 <= 2000.0) {
         return Err(bad(c, "matWidthMm/matHeightMm must be positive numbers up to 2000"));
     }

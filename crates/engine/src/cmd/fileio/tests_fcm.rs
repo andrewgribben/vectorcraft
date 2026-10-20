@@ -114,7 +114,7 @@ fn a_mat_scan_lands_at_mat_coordinates_on_a_locked_template_layer() {
     assert!((r["widthMm"].as_f64().unwrap() - 60.0).abs() < 1e-9 && (r["heightMm"].as_f64().unwrap() - 40.0).abs() < 1e-9);
     let st = s.doc().unwrap();
     let ab = st.doc.artboards[0].rect;
-    assert!((ab.width() / mm - 296.67).abs() < 0.01 && (ab.height() / mm - 298.8).abs() < 0.01, "artboard is the mat");
+    assert!((ab.width() / mm - 304.8).abs() < 0.01 && (ab.height() / mm - 304.8).abs() < 0.01, "artboard is the mat");
     let b = st.doc.node(vectorcraft_doc::NodeId(r["id"].as_u64().unwrap())).unwrap().visual_bounds().unwrap();
     assert!(((b.x0 - ab.x0) / mm - 0.5).abs() < 0.01 && ((b.y0 - ab.y0) / mm - 0.5).abs() < 0.01, "{b:?}");
     assert!((b.width() / mm - 60.0).abs() < 0.01 && (b.height() / mm - 40.0).abs() < 0.01, "{b:?}");
