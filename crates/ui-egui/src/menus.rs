@@ -1603,6 +1603,18 @@ pub fn run_ui_command(app: &mut VectorcraftApp, id: &str, p: &Value) -> Option<R
         "ui.colorGuideLimit" => crate::panels::color_guide::set_limit(app, p),
         "ui.colorPanel" => crate::panels::color::command(app, p),
         "ui.savePdfDialog" => crate::dialogs::open_save_pdf(app, p),
+        // Place Mat Scan…: pick the scan the cutter saved to USB, then place it at mat coordinates.
+        "document.placeMatScan" if s("path").is_none() => {
+            let pick = crate::FilePick { filters: vec![("Mat scans", &["jpg", "jpeg", "png"])], ..Default::default() };
+            match crate::picks::open(app, &pick) {
+                None => Err("cancelled".into()),
+                Some(path) => {
+                    let mut q = if p.is_object() { p.clone() } else { json!({}) };
+                    q["path"] = json!(path);
+                    app.run("document.placeMatScan", q)
+                }
+            }
+        }
         "file.exportAs" if s("path").is_none() => {
             crate::dialogs::open_export_as(app, s("format").as_deref(), p);
             Ok(Value::Null)
@@ -2383,6 +2395,7 @@ pub fn menu_tree_named(english_names: bool) -> Vec<(&'static str, Vec<Item>)> {
                         Sep,
                         cp("Export for ScanNCut…", "file.exportAs", json!({"format": "fcm"})),
                         c("Send to ScanNCut", "document.sendToCutter"),
+                        c("Place Mat Scan…", "document.placeMatScan"),
                         Sep,
                         c("Save for Web (Legacy)…", "file.saveForWeb"),
                     ],
