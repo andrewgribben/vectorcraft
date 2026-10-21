@@ -175,3 +175,43 @@ fn it_is_one_undo_step_for_the_outlines() {
         s.doc().unwrap().doc.layers.iter().find(|l| l.name.as_deref() == Some("Cut lines")).map_or(0, |l| l.children().map_or(0, |c| c.len()));
     assert_eq!(before, after, "one undo removes all the outlines");
 }
+
+/// How many anchors the outline `id` has.
+fn anchors(s: &Session, id: &Value) -> usize {
+    let n = s.doc().unwrap().doc.node(vectorcraft_doc::NodeId(id.as_u64().unwrap())).unwrap();
+    match &n.kind {
+        NodeKind::Path { path, .. } => path.anchor_count(),
+        other => panic!("not a path: {other:?}"),
+    }
+}
+
+#[test]
+fn a_finely_segmented_outline_is_simplified_before_it_is_grown() {
+    // a 1000-sided polygon is what a trace of a round shape looks like: thousands of tiny segments
+    let build = || {
+        let mut s = session();
+        s.execute("shape.polygon", &json!({"cx": mm(100.0), "cy": mm(100.0), "radius": mm(30.0), "sides": 1000})).unwrap();
+        s
+    };
+    let mut s = build();
+    let r = cut_lines(&mut s, json!({"marginMm": 1.0})).unwrap();
+    let simplified = anchors(&s, &r["ids"][0]);
+    let mut s = build();
+    let r = cut_lines(&mut s, json!({"marginMm": 1.0, "smoothMm": 0})).unwrap();
+    let raw = anchors(&s, &r["ids"][0]);
+    assert!(simplified * 4 < raw, "simplified {simplified} anchors, not simplified {raw}");
+    // and the shape is still a 30 mm radius circle grown by 1 mm
+    let mut s = build();
+    let r = cut_lines(&mut s, json!({"marginMm": 1.0})).unwrap();
+    let b = bounds_mm(&s, &r["ids"][0]);
+    assert!(close(b.2 - b.0, 62.0) || (b.2 - b.0 - 62.0).abs() < 0.4, "{b:?}");
+}
+
+#[test]
+fn the_smoothing_amount_is_checked() {
+    let mut s = session();
+    rect(&mut s, 10.0, 10.0, 30.0, 30.0);
+    assert!(cut_lines(&mut s, json!({"smoothMm": -1})).is_err());
+    assert!(cut_lines(&mut s, json!({"smoothMm": 50})).is_err());
+    assert!(cut_lines(&mut s, json!({"smoothMm": 0})).is_ok());
+}

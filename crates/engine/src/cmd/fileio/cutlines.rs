@@ -27,7 +27,7 @@ pub fn specs() -> Vec<CommandSpec> {
         "Make Cut Lines",
         [],
         None,
-        "{marginMm?: 1 (0 to 50: how far each outline stands off the art), fillHoles?: true (cut only the outside edge; false keeps holes as holes), minAreaMm2?: 4 (pieces smaller than this are left out: specks), layer?: \"Cut lines\" (the layer the outlines go on; created if missing)} → {layer, ids, pieces, skipped, overlaps, marginMm}; from the selected shapes (usually an expanded Image Trace of a scan): unites shapes that touch, fills holes, grows each piece by the margin with round corners and draws the outlines as thin red paths on the layer. A layer name that contains draw, pen, emboss or foil picks that tool in the FCM export; any other name cuts. `overlaps` counts outlines that run into each other (stickers closer than two margins)",
+        "{marginMm?: 1 (0 to 50: how far each outline stands off the art), fillHoles?: true (cut only the outside edge; false keeps holes as holes), minAreaMm2?: 4 (pieces smaller than this are left out: specks), smoothMm?: 0.15 (0 to 5: each outline is simplified to within this before it is grown: a trace has thousands of tiny segments, and the cutter is no more accurate than about 0.25 mm), layer?: \"Cut lines\" (the layer the outlines go on; created if missing)} → {layer, ids, pieces, skipped, overlaps, marginMm}; from the selected shapes (usually an expanded Image Trace of a scan): unites shapes that touch, fills holes, grows each piece by the margin with round corners and draws the outlines as thin red paths on the layer. A layer name that contains draw, pen, emboss or foil picks that tool in the FCM export; any other name cuts. `overlaps` counts outlines that run into each other (stickers closer than two margins)",
         has_selection,
         cut_lines
     )]
@@ -100,6 +100,10 @@ fn cut_lines(s: &mut Session, p: &Value) -> Result<Value> {
     if !(0.0..=1.0e6).contains(&min_area_mm2) {
         return Err(bad(c, "minAreaMm2 must be a positive number"));
     }
+    let smooth_mm = num(c, p, "smoothMm", 0.15)?;
+    if !(0.0..=5.0).contains(&smooth_mm) {
+        return Err(bad(c, "smoothMm must be between 0 and 5"));
+    }
     let fill_holes = p.get("fillHoles").and_then(Value::as_bool).unwrap_or(true);
     let name = str_param(p, "layer").map(str::trim).filter(|n| !n.is_empty()).unwrap_or(LAYER).to_string();
     if name.chars().count() > 64 {
@@ -128,6 +132,9 @@ fn cut_lines(s: &mut Session, p: &Value) -> Result<Value> {
             skipped += 1;
             continue;
         }
+        // Simplify first: offsetting a trace's thousands of tiny segments takes minutes, and the result is no
+        // more accurate than the cutter.
+        let piece = if smooth_mm > 0.0 { po::simplify(&piece, smooth_mm / MM_PER_PT) } else { piece };
         let grown = if delta > 0.0 { po::offset_path(&piece, delta, po::Join::Round, 4.0) } else { piece };
         if !grown.is_empty() {
             outlines.push(grown);
