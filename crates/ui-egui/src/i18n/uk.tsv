@@ -4821,3 +4821,6 @@ lighting	Light	Світло
 # Select by Color (select.color)
 	Select by Color	Виділити за кольором
 	Move Anchor Point	Перемістити опорну точку
+	Cutter	Різальний плотер
+	Cutter Summary	Підсумок по плотеру
+	Place Mat Scan	Розмістити скан килимка

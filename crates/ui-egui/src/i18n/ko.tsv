@@ -4804,3 +4804,6 @@ lighting	Light	광원
 # Select by Color (select.color)
 	Select by Color	색상별 선택
 	Move Anchor Point	앵커 포인트 이동
+	Cutter	커터
+	Cutter Summary	커터 요약
+	Place Mat Scan	매트 스캔 배치

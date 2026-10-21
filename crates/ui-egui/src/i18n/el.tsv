@@ -5179,3 +5179,6 @@ effect	Points	Σημεία
 # Select by Color (select.color)
 	Select by Color	Επιλογή βάσει χρώματος
 	Move Anchor Point	Μετακίνηση σημείου αγκύρωσης
+	Cutter	Κόφτης
+	Cutter Summary	Σύνοψη κόφτη
+	Place Mat Scan	Τοποθέτηση σάρωσης βάσης κοπής

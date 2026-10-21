@@ -4881,3 +4881,6 @@ lighting	Light	ライト
 # Select by Color (select.color)
 	Select by Color	カラーで選択
 	Move Anchor Point	アンカーポイントを移動
+	Cutter	カッター
+	Cutter Summary	カッターの概要
+	Place Mat Scan	マットのスキャンを配置

@@ -4837,3 +4837,6 @@ lighting	Light	Свет
 # Select by Color (select.color)
 	Select by Color	Выделить по цвету
 	Move Anchor Point	Переместить опорную точку
+	Cutter	Режущий плоттер
+	Cutter Summary	Сводка по плоттеру
+	Place Mat Scan	Разместить скан коврика

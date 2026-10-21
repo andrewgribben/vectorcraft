@@ -35,8 +35,42 @@ pub struct FcmOutput {
     pub warnings: Vec<String>,
 }
 
-/// Layer-name hints: "draw", "emboss" and "foil" pick that tool; anything else cuts.
-fn tool_for(layer: &str) -> Tool {
+/// One layer and the tool its name picks.
+#[derive(Clone, Debug, PartialEq)]
+pub struct LayerInfo {
+    pub name: String,
+    pub tool: &'static str,
+    /// Pieces written from this layer (nested layers and groups included).
+    pub pieces: usize,
+}
+
+/// What an export would write, without writing it.
+#[derive(Clone, Debug)]
+pub struct FcmSummary {
+    pub artboard_mm: (f64, f64),
+    pub cutting_area_mm: (f64, f64),
+    pub pieces: usize,
+    /// Pieces per tool, in the order cut, draw, emboss, foil.
+    pub by_tool: [(&'static str, usize); 4],
+    pub layers: Vec<LayerInfo>,
+    /// Paths that are not closed, on any tool.
+    pub open_paths: usize,
+    pub off_mat: usize,
+    pub warnings: Vec<String>,
+}
+
+/// The tool's name as shown to the user.
+pub fn tool_name(t: Tool) -> &'static str {
+    match t {
+        Tool::Cut => "cut",
+        Tool::Draw => "draw",
+        Tool::Emboss => "emboss",
+        Tool::Foil => "foil",
+    }
+}
+
+/// Layer-name hints: "draw" (or "pen"), "emboss" and "foil" pick that tool; anything else cuts.
+pub fn tool_for(layer: &str) -> Tool {
     let l = layer.to_ascii_lowercase();
     if l.contains("draw") || l.contains("pen") {
         Tool::Draw
@@ -53,6 +87,9 @@ struct Walk {
     pieces: Vec<PieceSpec>,
     warnings: Vec<String>,
     origin: (f64, f64),
+    layers: Vec<LayerInfo>,
+    by_tool: [usize; 4],
+    open_paths: usize,
 }
 
 impl Walk {
@@ -76,9 +113,12 @@ impl Walk {
                     return;
                 }
                 let t = n.name.as_deref().map(tool_for).unwrap_or(tool);
+                let before = self.pieces.len();
                 for c in children {
                     self.node(c, t);
                 }
+                let name = n.name.clone().unwrap_or_default();
+                self.layers.push(LayerInfo { name, tool: tool_name(t), pieces: self.pieces.len() - before });
             }
             NodeKind::Group { children, clip } => {
                 if *clip {
@@ -168,6 +208,14 @@ impl Walk {
         if contours.is_empty() {
             return;
         }
+        self.open_paths += contours.iter().filter(|c| !c.closed).count();
+        let slot = match tool {
+            Tool::Cut => 0,
+            Tool::Draw => 1,
+            Tool::Emboss => 2,
+            Tool::Foil => 3,
+        };
+        self.by_tool[slot] += 1;
         // The piece origin is the centre of its control-point box, in mat mm.
         let (mut x0, mut y0, mut x1, mut y1) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
         for c in &contours {
@@ -189,30 +237,59 @@ impl Walk {
     }
 }
 
-pub fn export(doc: &Document, opts: &FcmOptions) -> Result<FcmOutput, String> {
-    let board = doc.artboards.get(opts.artboard).ok_or_else(|| format!("no artboard {}", opts.artboard + 1))?;
+/// What the walk found, and the size of the artboard and of the pieces that fall off the mat.
+struct Found {
+    walk: Walk,
+    artboard_mm: (f64, f64),
+    off_mat: usize,
+}
+
+fn walk_document(doc: &Document, opts: &FcmOptions) -> Result<Found, String> {
+    let board = doc.artboards.get(opts.artboard).ok_or_else(|| format!("no artboard {}", opts.artboard.saturating_add(1)))?;
     let r: Rect = board.rect;
     let (w, h) = (r.width() * MM_PER_PT, r.height() * MM_PER_PT);
-    let mut walk = Walk { pieces: vec![], warnings: vec![], origin: (r.x0, r.y0) };
+    let mut walk = Walk { pieces: vec![], warnings: vec![], origin: (r.x0, r.y0), layers: vec![], by_tool: [0; 4], open_paths: 0 };
     if w > opts.mat_mm.0 + 0.5 || h > opts.mat_mm.1 + 0.5 {
         walk.warn(&format!("the artboard ({w:.1} x {h:.1} mm) is larger than the {:.1} x {:.1} mm cutting area", opts.mat_mm.0, opts.mat_mm.1));
     }
     for l in &doc.layers {
         walk.node(l, Tool::Cut);
     }
-    if walk.pieces.is_empty() {
-        return Err("nothing to cut: no visible paths on the layers".into());
-    }
     // pieces whose box leaves the cutting area
-    let off: usize = walk
+    let off_mat = walk
         .pieces
         .iter()
         .filter(|p| p.position_mm.0 < 0.0 || p.position_mm.1 < 0.0 || p.position_mm.0 > opts.mat_mm.0 || p.position_mm.1 > opts.mat_mm.1)
         .count();
-    if off > 0 {
-        walk.warn(&format!("{off} piece(s) are centred outside the cutting area"));
+    if off_mat > 0 {
+        walk.warn(&format!("{off_mat} piece(s) are centred outside the cutting area"));
+    }
+    Ok(Found { walk, artboard_mm: (w, h), off_mat })
+}
+
+pub fn export(doc: &Document, opts: &FcmOptions) -> Result<FcmOutput, String> {
+    let Found { walk, .. } = walk_document(doc, opts)?;
+    if walk.pieces.is_empty() {
+        return Err("nothing to cut: no visible paths on the layers".into());
     }
     let design = Design { mat_width_mm: opts.mat_mm.0, mat_height_mm: opts.mat_mm.1, pieces: walk.pieces };
     let bytes = fcm_core::write(&design.to_fcm());
     Ok(FcmOutput { bytes, warnings: walk.warnings })
+}
+
+/// What [`export`] would write for `doc`, without writing anything. An empty document is not an error
+/// here: it reports no pieces.
+pub fn summarize(doc: &Document, opts: &FcmOptions) -> Result<FcmSummary, String> {
+    let Found { walk, artboard_mm, off_mat } = walk_document(doc, opts)?;
+    let by_tool = [("cut", walk.by_tool[0]), ("draw", walk.by_tool[1]), ("emboss", walk.by_tool[2]), ("foil", walk.by_tool[3])];
+    Ok(FcmSummary {
+        artboard_mm,
+        cutting_area_mm: opts.mat_mm,
+        pieces: walk.pieces.len(),
+        by_tool,
+        layers: walk.layers,
+        open_paths: walk.open_paths,
+        off_mat,
+        warnings: walk.warnings,
+    })
 }

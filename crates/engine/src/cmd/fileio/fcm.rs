@@ -24,27 +24,60 @@ struct Params {
     mat_height_mm: Option<f64>,
 }
 
-pub(super) fn encode(doc: &vectorcraft_doc::Document, p: &Value) -> Result<Encoded> {
-    let q: Params = if p.is_object() { Params::deserialize(p).map_err(|e| bad(C, format!("FCM options: {e}")))? } else { Params::default() };
+/// The export options from the command params; the cutting area must be a sensible size.
+fn options(c: &str, p: &Value) -> Result<vectorcraft_fcm::FcmOptions> {
+    let q: Params = if p.is_object() { Params::deserialize(p).map_err(|e| bad(c, format!("FCM options: {e}")))? } else { Params::default() };
     let d = vectorcraft_fcm::FcmOptions::default();
     let mat = (q.mat_width_mm.unwrap_or(d.mat_mm.0), q.mat_height_mm.unwrap_or(d.mat_mm.1));
     if !(mat.0.is_finite() && mat.1.is_finite() && mat.0 > 0.0 && mat.1 > 0.0 && mat.0 <= 2000.0 && mat.1 <= 2000.0) {
-        return Err(bad(C, "FCM matWidthMm/matHeightMm must be positive numbers up to 2000"));
+        return Err(bad(c, "FCM matWidthMm/matHeightMm must be positive numbers up to 2000"));
     }
-    let out = vectorcraft_fcm::export(doc, &vectorcraft_fcm::FcmOptions { artboard: q.artboard.unwrap_or(0), mat_mm: mat }).map_err(|e| bad(C, e))?;
+    Ok(vectorcraft_fcm::FcmOptions { artboard: q.artboard.unwrap_or(0), mat_mm: mat })
+}
+
+pub(super) fn encode(doc: &vectorcraft_doc::Document, p: &Value) -> Result<Encoded> {
+    let opts = options(C, p)?;
+    let out = vectorcraft_fcm::export(doc, &opts).map_err(|e| bad(C, e))?;
     Ok(Encoded { warnings: out.warnings, ..Encoded::one(out.bytes) })
 }
 
+fn cutter_summary(s: &mut Session, p: &Value) -> Result<Value> {
+    let c = "document.cutterSummary";
+    let opts = options(c, p)?;
+    let sum = vectorcraft_fcm::summarize(&s.doc()?.doc, &opts).map_err(|e| bad(c, e))?;
+    Ok(json!({
+        "pieces": sum.pieces,
+        "byTool": sum.by_tool.iter().map(|(t, n)| json!({"tool": t, "pieces": n})).collect::<Vec<_>>(),
+        "layers": sum.layers.iter().map(|l| json!({"name": l.name, "tool": l.tool, "pieces": l.pieces})).collect::<Vec<_>>(),
+        "openPaths": sum.open_paths,
+        "offMat": sum.off_mat,
+        "artboardMm": [sum.artboard_mm.0, sum.artboard_mm.1],
+        "cuttingAreaMm": [sum.cutting_area_mm.0, sum.cutting_area_mm.1],
+        "warnings": sum.warnings,
+    }))
+}
+
 pub fn specs() -> Vec<CommandSpec> {
-    vec![cmd!(
-        "document.placeMatScan",
-        "Place Mat Scan",
-        [],
-        None,
-        "{path (the scan JPEG the machine saved to USB, IMG/000001.jpg), profile?: {pxPerMmX, pxPerMmY, originPxX, originPxY} | profilePath?: a JSON file with those four numbers (this machine's scan calibration; default: the measured CM900 one), matWidthMm?: 304.8, matHeightMm?: 304.8 (the Brother 12 x 12 in mat), resizeArtboard?: true (artboard 1 becomes the mat, top-left at 0, 0)} → {id, layer, xMm, yMm, widthMm, heightMm}; places the scan on a locked template layer \"Mat scan\" so that a point in the picture lies at the same position on the artboard as on the mat. Template layers are not exported to the cutter, so your art lines up with what is on the mat. No path: error",
-        has_doc,
-        place_mat_scan
-    )]
+    vec![
+        cmd!(
+            query "document.cutterSummary",
+            "Cutter Summary",
+            [],
+            None,
+            "{artboard?: 0, matWidthMm?: 296.67, matHeightMm?: 298.8} → {pieces, byTool: [{tool: cut|draw|emboss|foil, pieces}], layers: [{name, tool, pieces}], openPaths, offMat, artboardMm: [w, h], cuttingAreaMm: [w, h], warnings}; what an FCM export would write for this document, without writing a file: pieces per tool (a layer's name picks the tool: draw or pen, emboss, foil, else cut), pieces centred off the cutting area, open paths and the export's warnings. Template layers (such as the placed mat scan) are not counted",
+            has_doc,
+            cutter_summary
+        ),
+        cmd!(
+            "document.placeMatScan",
+            "Place Mat Scan",
+            [],
+            None,
+            "{path (the scan JPEG the machine saved to USB, IMG/000001.jpg), profile?: {pxPerMmX, pxPerMmY, originPxX, originPxY} | profilePath?: a JSON file with those four numbers (this machine's scan calibration; default: the measured CM900 one), matWidthMm?: 304.8, matHeightMm?: 304.8 (the Brother 12 x 12 in mat), resizeArtboard?: true (artboard 1 becomes the mat, top-left at 0, 0)} → {id, layer, xMm, yMm, widthMm, heightMm}; places the scan on a locked template layer \"Mat scan\" so that a point in the picture lies at the same position on the artboard as on the mat. Template layers are not exported to the cutter, so your art lines up with what is on the mat. No path: error",
+            has_doc,
+            place_mat_scan
+        ),
+    ]
 }
 
 /// A finite number param, or `default`.
