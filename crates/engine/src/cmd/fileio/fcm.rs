@@ -81,7 +81,7 @@ pub fn specs() -> Vec<CommandSpec> {
 }
 
 /// A finite number param, or `default`.
-fn num(c: &str, p: &Value, key: &str, default: f64) -> Result<f64> {
+pub(super) fn num(c: &str, p: &Value, key: &str, default: f64) -> Result<f64> {
     match p.get(key) {
         None | Some(Value::Null) => Ok(default),
         Some(v) => v.as_f64().filter(|n| n.is_finite()).ok_or_else(|| bad(c, format!("{key} must be a number"))),

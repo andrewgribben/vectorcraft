@@ -103,3 +103,16 @@ fn the_panel_is_listed_with_the_other_panels_and_has_an_icon() {
     assert!(crate::state::ICON_PANEL_GROUPS.iter().any(|g| g.contains(&"cutter")), "shown as an icon in the dock");
     assert!(crate::state::ICON_PANELS.iter().any(|&(id, _, icon)| id == "cutter" && icon == "scissors"));
 }
+
+#[test]
+fn the_panel_offers_cut_lines_for_the_selection_and_lists_the_new_layer() {
+    let mut app = with_rectangle();
+    let text = panel(&mut app);
+    assert!(text.contains("Make cut lines") && text.contains("Margin") && text.contains("Fill holes"), "{text}");
+    app.run("select.all", json!({})).unwrap();
+    app.run("document.cutLines", json!({"marginMm": 2.0})).unwrap();
+    let text = panel(&mut app);
+    assert!(text.contains("Cut lines"), "{text}");
+    // the rectangle and its outline are both pieces now, the outline on the "Cut lines" layer
+    assert!(text.contains("Pieces"), "{text}");
+}

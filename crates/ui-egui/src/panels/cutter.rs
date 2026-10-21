@@ -120,6 +120,38 @@ fn mat_scan_section(app: &mut VectorcraftApp, ui: &mut Ui) {
     }
 }
 
+/// The cut-line settings kept between frames.
+#[derive(Clone)]
+struct CutSettings {
+    margin_mm: f64,
+    fill_holes: bool,
+}
+
+impl Default for CutSettings {
+    fn default() -> Self {
+        Self { margin_mm: 1.0, fill_holes: true }
+    }
+}
+
+fn cut_lines_section(app: &mut VectorcraftApp, ui: &mut Ui) {
+    widgets::section_header(ui, "Cut lines");
+    widgets::dim_label(ui, "Trace the scan (Object > Image Trace > Make and Expand), select the traced shapes, then make cut lines around them.");
+    let mut cs: CutSettings = pstate(ui.ctx(), "cutter-cut-settings");
+    ui.horizontal(|ui| {
+        widgets::field_label(ui, "Margin");
+        if let Some(v) = widgets::plain_field(ui, "cutter-margin", cs.margin_mm, " mm", 1, 70.0) {
+            cs.margin_mm = v.clamp(0.0, 50.0);
+        }
+    });
+    if widgets::check(ui, "Fill holes (cut only the outside edge)", cs.fill_holes, true) {
+        cs.fill_holes = !cs.fill_holes;
+    }
+    set_pstate(ui.ctx(), "cutter-cut-settings", cs.clone());
+    if widgets::primary_button_enabled(ui, "Make cut lines", super::selection_len(app) > 0).clicked() {
+        crate::menus::invoke(app, "document.cutLines", json!({ "marginMm": cs.margin_mm, "fillHoles": cs.fill_holes }));
+    }
+}
+
 fn export_section(app: &mut VectorcraftApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     widgets::section_header(ui, "What will be cut");
@@ -168,6 +200,8 @@ pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
     }
     egui::ScrollArea::vertical().show(ui, |ui| {
         mat_scan_section(app, ui);
+        widgets::divider(ui);
+        cut_lines_section(app, ui);
         widgets::divider(ui);
         export_section(app, ui);
     });

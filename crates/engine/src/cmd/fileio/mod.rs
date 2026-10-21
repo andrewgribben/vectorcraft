@@ -24,6 +24,7 @@
 mod action_batch;
 mod affinity;
 mod batch;
+mod cutlines;
 pub mod dxf;
 pub mod dxfimport;
 mod encode;
@@ -234,6 +235,7 @@ pub fn specs() -> Vec<CommandSpec> {
     .into_iter()
     .chain(save::specs())
     .chain(fcm::specs())
+    .chain(cutlines::specs())
     .collect()
 }
 
@@ -1365,6 +1367,8 @@ mod tests_screens;
 #[cfg(test)]
 mod tests_text;
 
+#[cfg(test)]
+mod tests_cutlines;
 #[cfg(test)]
 mod tests_dxf;
 #[cfg(test)]
