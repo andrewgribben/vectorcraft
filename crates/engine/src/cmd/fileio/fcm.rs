@@ -70,10 +70,10 @@ pub fn specs() -> Vec<CommandSpec> {
         ),
         cmd!(
             "document.placeMatScan",
-            "Place Mat Scan",
+            "Import Scan",
             [],
             None,
-            "{path (the scan JPEG the machine saved to USB, IMG/000001.jpg), profile?: {pxPerMmX, pxPerMmY, originPxX, originPxY} | profilePath?: a JSON file with those four numbers (this machine's scan calibration; default: the measured CM900 one), matWidthMm?: 304.8, matHeightMm?: 304.8 (the Brother 12 x 12 in mat), resizeArtboard?: true (artboard 1 becomes the mat, top-left at 0, 0)} → {id, layer, xMm, yMm, widthMm, heightMm}; places the scan on a locked template layer \"Mat scan\" so that a point in the picture lies at the same position on the artboard as on the mat. Template layers are not exported to the cutter, so your art lines up with what is on the mat. No path: error",
+            "{path (the scan JPEG the machine saved to USB, IMG/000001.jpg), profile?: {pxPerMmX, pxPerMmY, originPxX, originPxY} | profilePath?: a JSON file with those four numbers (this machine's scan calibration; default: the measured CM900 one), matWidthMm?: 304.8, matHeightMm?: 304.8 (the Brother 12 x 12 in mat), resizeArtboard?: false (true: artboard 1 becomes the mat, top-left at 0, 0; by default the artboard is left as it is, and the scan is placed from its top-left corner, which is the mat's top-left corner)} → {id, layer, xMm, yMm, widthMm, heightMm}; places the scan on a locked template layer \"Mat scan\" so that a point in the picture lies at the same position on the artboard as on the mat. Template layers are not exported to the cutter, so your art lines up with what is on the mat. No path: error",
             has_doc,
             place_mat_scan
         ),
@@ -128,7 +128,7 @@ fn place_mat_scan(s: &mut Session, p: &Value) -> Result<Value> {
         return Err(bad(c, "matWidthMm/matHeightMm must be positive numbers up to 2000"));
     }
     let pt = |mm: f64| mm / MM_PER_PT;
-    if p.get("resizeArtboard").and_then(Value::as_bool).unwrap_or(true) {
+    if p.get("resizeArtboard").and_then(Value::as_bool).unwrap_or(false) {
         s.execute("artboard.setProps", &json!({"index": 0, "x": 0, "y": 0, "width": pt(mat.0), "height": pt(mat.1)}))?;
     }
     let artboard = s.doc()?.doc.artboards.first().map(|a| a.rect).ok_or_else(|| bad(c, "the document has no artboard"))?;

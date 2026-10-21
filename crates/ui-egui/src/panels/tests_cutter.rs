@@ -39,7 +39,7 @@ fn an_empty_document_has_nothing_to_cut_and_no_export_is_offered_as_a_piece_coun
     let mut app = app();
     let text = panel(&mut app);
     assert!(text.contains("Nothing to cut yet"), "{text}");
-    assert!(text.contains("Place scan"), "{text}");
+    assert!(text.contains("Import scan"), "{text}");
     assert!(!text.contains("Pieces"), "{text}");
 }
 
@@ -79,13 +79,13 @@ fn a_placed_scan_shows_its_size_and_is_removed_with_its_layer() {
     app.run("document.placeMatScan", json!({"path": png.to_string_lossy()})).unwrap();
     let text = panel(&mut app);
     assert!(text.contains("120 x 160 px"), "{text}");
-    assert!(text.contains("Remove scan") && !text.contains("Place scan"), "{text}");
+    assert!(text.contains("Remove scan") && !text.contains("Import scan"), "{text}");
     // the scan is a template layer: still exactly one piece to cut
     assert!(text.contains("Pieces"), "{text}");
     let layer = app.session.active().unwrap().doc.layers.iter().find(|l| l.name.as_deref() == Some("Mat scan")).unwrap().id;
     app.run("layer.delete", json!({"ids": [layer.0]})).unwrap();
     let text = panel(&mut app);
-    assert!(text.contains("Place scan") && !text.contains("Remove scan"), "{text}");
+    assert!(text.contains("Import scan") && !text.contains("Remove scan"), "{text}");
     std::fs::remove_file(png).ok();
 }
 

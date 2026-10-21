@@ -106,13 +106,13 @@ fn mat_scan_section(app: &mut VectorcraftApp, ui: &mut Ui) {
             widgets::dim_label(ui, "The scan is a locked template layer: it is not cut or exported.");
         }
         None => {
-            widgets::dim_label(ui, "Scan the mat to USB on the machine, then place the picture here so your art lines up with it.");
+            widgets::dim_label(ui, "Scan the mat to USB on the machine, then import the picture here so your art lines up with it.");
             row(ui, "Profile", "built-in (CM900)".into());
             ui.horizontal_wrapped(|ui| {
-                if widgets::secondary_button(ui, "Place scan…").clicked() {
+                if widgets::secondary_button(ui, "Import scan…").clicked() {
                     crate::menus::invoke(app, "document.placeMatScan", json!({}));
                 }
-                if widgets::secondary_button(ui, "Place with profile file…").clicked() {
+                if widgets::secondary_button(ui, "Import with profile file…").clicked() {
                     crate::menus::invoke(app, "document.placeMatScan", json!({ "pickProfile": true }));
                 }
             });

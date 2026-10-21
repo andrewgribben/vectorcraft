@@ -100,7 +100,7 @@ fn a_mat_scan_lands_at_mat_coordinates_on_a_locked_template_layer() {
     assert!((r["widthMm"].as_f64().unwrap() - 60.0).abs() < 1e-9 && (r["heightMm"].as_f64().unwrap() - 40.0).abs() < 1e-9);
     let st = s.doc().unwrap();
     let ab = st.doc.artboards[0].rect;
-    assert!((ab.width() / mm - 304.8).abs() < 0.01 && (ab.height() / mm - 304.8).abs() < 0.01, "artboard is the mat");
+    assert!((ab.width() - 100.0).abs() < 1e-9 && (ab.height() - 100.0).abs() < 1e-9, "the artboard keeps its size: {ab:?}");
     let b = st.doc.node(vectorcraft_doc::NodeId(r["id"].as_u64().unwrap())).unwrap().visual_bounds().unwrap();
     assert!(((b.x0 - ab.x0) / mm - 0.5).abs() < 0.01 && ((b.y0 - ab.y0) / mm - 0.5).abs() < 0.01, "{b:?}");
     assert!((b.width() / mm - 60.0).abs() < 0.01 && (b.height() / mm - 40.0).abs() < 0.01, "{b:?}");
@@ -222,4 +222,19 @@ fn the_cutter_summary_reports_pieces_off_the_mat_and_empty_documents() {
     assert_eq!(r["pieces"], 0, "an empty document has no pieces, not an error: {r}");
     assert!(e.execute("document.cutterSummary", &json!({"matWidthMm": -1})).is_err());
     assert!(Session::new().execute("document.cutterSummary", &json!({})).is_err(), "no document");
+}
+
+#[test]
+fn a_mat_scan_can_make_the_artboard_the_mat_when_asked() {
+    let mm = 72.0 / 25.4;
+    let png = grey_png("g", 100, 100);
+    let mut s = Session::new();
+    s.execute("file.new", &json!({"width": 210.0 * mm, "height": 297.0 * mm})).unwrap();
+    s.execute("document.placeMatScan", &json!({"path": png.to_string_lossy()})).unwrap();
+    let ab = s.doc().unwrap().doc.artboards[0].rect;
+    assert!((ab.width() / mm - 210.0).abs() < 0.01 && (ab.height() / mm - 297.0).abs() < 0.01, "A4 stays A4: {ab:?}");
+    s.execute("document.placeMatScan", &json!({"path": png.to_string_lossy(), "resizeArtboard": true})).unwrap();
+    let ab = s.doc().unwrap().doc.artboards[0].rect;
+    assert!((ab.width() / mm - 304.8).abs() < 0.01 && (ab.height() / mm - 304.8).abs() < 0.01, "asked: the artboard is the mat: {ab:?}");
+    std::fs::remove_file(png).ok();
 }

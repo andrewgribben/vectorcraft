@@ -1603,7 +1603,7 @@ pub fn run_ui_command(app: &mut VectorcraftApp, id: &str, p: &Value) -> Option<R
         "ui.colorGuideLimit" => crate::panels::color_guide::set_limit(app, p),
         "ui.colorPanel" => crate::panels::color::command(app, p),
         "ui.savePdfDialog" => crate::dialogs::open_save_pdf(app, p),
-        // Place Mat Scan…: pick the scan the cutter saved to USB, then place it at mat coordinates.
+        // Import Scan (the Cutter panel): pick the scan the cutter saved to USB, then place it at mat coordinates.
         "document.placeMatScan" if s("path").is_none() => {
             let scan = crate::FilePick { filters: vec![("Mat scans", &["jpg", "jpeg", "png"])], ..Default::default() };
             let mut q = if p.is_object() { p.clone() } else { json!({}) };
