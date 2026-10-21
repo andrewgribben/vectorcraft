@@ -1,8 +1,6 @@
 //! ScanNCut `.fcm` export (`document.export {format: fcm}`): one cutting file for the chosen artboard,
 //! which is the mat (its top-left corner is the mat's top-left corner).
 
-use std::path::{Path, PathBuf};
-
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -38,92 +36,15 @@ pub(super) fn encode(doc: &vectorcraft_doc::Document, p: &Value) -> Result<Encod
 }
 
 pub fn specs() -> Vec<CommandSpec> {
-    vec![
-        cmd!(
-            "document.placeMatScan",
-            "Place Mat Scan",
-            [],
-            None,
-            "{path (the scan JPEG the machine saved to USB, IMG/000001.jpg), profile?: {pxPerMmX, pxPerMmY, originPxX, originPxY} (this machine's scan calibration; default: the measured CM900 one), matWidthMm?: 304.8, matHeightMm?: 304.8 (the Brother 12 x 12 in mat), resizeArtboard?: true (artboard 1 becomes the mat, top-left at 0, 0)} → {id, layer, xMm, yMm, widthMm, heightMm}; places the scan on a locked template layer \"Mat scan\" so that a point in the picture lies at the same position on the artboard as on the mat. Template layers are not exported to the cutter, so your art lines up with what is on the mat. No path: error",
-            has_doc,
-            place_mat_scan
-        ),
-        cmd!(
-            "document.sendToCutter",
-            "Send to ScanNCut",
-            [],
-            None,
-            "{volume?: \"/Volumes/NO NAME\" (the cutter's drive; default: found among the mounted drives), name?: file name without extension (default: the document's), …document.export options for fcm} → {path, bytes, warnings, volume}; writes the cutting file straight onto the machine's USB drive, where the machine's own screen picks it up. Same as document.export {format: fcm, path} with the drive found for you",
-            has_doc,
-            send_to_cutter
-        ),
-    ]
-}
-
-/// The drive names a ScanNCut presents (lower case).
-const MACHINE_VOLUMES: &[&str] = &["no name"];
-
-/// Mount roots to look in: macOS, Linux desktops.
-fn mount_roots() -> Vec<PathBuf> {
-    let mut roots = vec![PathBuf::from("/Volumes")];
-    if let Some(user) = std::env::var_os("USER") {
-        roots.push(Path::new("/media").join(&user));
-        roots.push(Path::new("/run/media").join(&user));
-    }
-    roots
-}
-
-/// The first mounted drive that looks like a ScanNCut's, under `roots`.
-pub(super) fn find_machine_volume(roots: &[PathBuf]) -> Option<PathBuf> {
-    for root in roots {
-        let Ok(entries) = std::fs::read_dir(root) else { continue };
-        let mut found: Vec<PathBuf> = entries
-            .filter_map(|e| e.ok())
-            .map(|e| e.path())
-            .filter(|p| {
-                p.is_dir() && p.file_name().and_then(|n| n.to_str()).is_some_and(|n| MACHINE_VOLUMES.contains(&n.to_ascii_lowercase().as_str()))
-            })
-            .collect();
-        found.sort();
-        if let Some(p) = found.into_iter().next() {
-            return Some(p);
-        }
-    }
-    None
-}
-
-/// A file name the machine's FAT drive takes: letters, digits, `-` and `_`, at most 24 characters.
-fn safe_name(name: &str) -> String {
-    let n: String = name.chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' }).take(24).collect();
-    if n.is_empty() { "design".to_string() } else { n }
-}
-
-fn send_to_cutter(s: &mut Session, p: &Value) -> Result<Value> {
-    let c = "document.sendToCutter";
-    let volume = match p.get("volume").and_then(Value::as_str) {
-        Some(v) => PathBuf::from(v),
-        None => find_machine_volume(&mount_roots())
-            .ok_or_else(|| bad(c, "no ScanNCut drive found: connect the machine (it appears as a drive named NO NAME) or pass volume"))?,
-    };
-    if !volume.is_dir() {
-        return Err(bad(c, format!("{} is not a mounted drive", volume.display())));
-    }
-    let base = match p.get("name").and_then(Value::as_str) {
-        Some(n) => safe_name(n),
-        None => safe_name(s.doc()?.doc.title.trim_end_matches(".fcm")),
-    };
-    let path = volume.join(format!("{base}.fcm"));
-    let mut q = if p.is_object() { p.clone() } else { json!({}) };
-    for k in ["volume", "name"] {
-        if let Some(o) = q.as_object_mut() {
-            o.remove(k);
-        }
-    }
-    q["format"] = json!("fcm");
-    q["path"] = json!(path.to_string_lossy());
-    let mut r = super::export::export(s, &q)?;
-    r["volume"] = json!(volume.to_string_lossy());
-    Ok(r)
+    vec![cmd!(
+        "document.placeMatScan",
+        "Place Mat Scan",
+        [],
+        None,
+        "{path (the scan JPEG the machine saved to USB, IMG/000001.jpg), profile?: {pxPerMmX, pxPerMmY, originPxX, originPxY} | profilePath?: a JSON file with those four numbers (this machine's scan calibration; default: the measured CM900 one), matWidthMm?: 304.8, matHeightMm?: 304.8 (the Brother 12 x 12 in mat), resizeArtboard?: true (artboard 1 becomes the mat, top-left at 0, 0)} → {id, layer, xMm, yMm, widthMm, heightMm}; places the scan on a locked template layer \"Mat scan\" so that a point in the picture lies at the same position on the artboard as on the mat. Template layers are not exported to the cutter, so your art lines up with what is on the mat. No path: error",
+        has_doc,
+        place_mat_scan
+    )]
 }
 
 /// A finite number param, or `default`.
@@ -136,8 +57,22 @@ fn num(c: &str, p: &Value, key: &str, default: f64) -> Result<f64> {
 
 fn profile(c: &str, p: &Value) -> Result<vectorcraft_fcm::scan::MatScanProfile> {
     let d = vectorcraft_fcm::scan::MatScanProfile::default();
-    let prof = match p.get("profile") {
-        None | Some(Value::Null) => d,
+    let from_file;
+    let given = p.get("profile").filter(|v| !v.is_null());
+    let src = match (given, str_param(p, "profilePath")) {
+        (Some(_), Some(_)) => return Err(bad(c, "give profile or profilePath, not both")),
+        (None, Some(path)) => {
+            let bytes = super::read_file(path)?;
+            if bytes.len() > 64 * 1024 {
+                return Err(bad(c, "the profile file is too big for a scan profile"));
+            }
+            from_file = serde_json::from_slice::<Value>(&bytes).map_err(|e| bad(c, format!("profile file {path}: {e}")))?;
+            Some(&from_file)
+        }
+        (v, None) => v,
+    };
+    let prof = match src {
+        None => d,
         Some(v) if v.is_object() => vectorcraft_fcm::scan::MatScanProfile {
             px_per_mm_x: num(c, v, "pxPerMmX", d.px_per_mm_x)?,
             px_per_mm_y: num(c, v, "pxPerMmY", d.px_per_mm_y)?,

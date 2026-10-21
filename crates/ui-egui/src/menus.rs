@@ -1605,12 +1605,20 @@ pub fn run_ui_command(app: &mut VectorcraftApp, id: &str, p: &Value) -> Option<R
         "ui.savePdfDialog" => crate::dialogs::open_save_pdf(app, p),
         // Place Mat Scan…: pick the scan the cutter saved to USB, then place it at mat coordinates.
         "document.placeMatScan" if s("path").is_none() => {
-            let pick = crate::FilePick { filters: vec![("Mat scans", &["jpg", "jpeg", "png"])], ..Default::default() };
-            match crate::picks::open(app, &pick) {
+            let scan = crate::FilePick { filters: vec![("Mat scans", &["jpg", "jpeg", "png"])], ..Default::default() };
+            let mut q = if p.is_object() { p.clone() } else { json!({}) };
+            let want_profile = q.as_object_mut().and_then(|o| o.remove("pickProfile")).and_then(|v| v.as_bool()) == Some(true);
+            match crate::picks::open(app, &scan) {
                 None => Err("cancelled".into()),
                 Some(path) => {
-                    let mut q = if p.is_object() { p.clone() } else { json!({}) };
                     q["path"] = json!(path);
+                    if want_profile {
+                        let prof = crate::FilePick { filters: vec![("Scan profile", &["json"])], ..Default::default() };
+                        match crate::picks::open(app, &prof) {
+                            None => return Some(Err("cancelled".into())),
+                            Some(f) => q["profilePath"] = json!(f),
+                        }
+                    }
                     app.run("document.placeMatScan", q)
                 }
             }
@@ -2394,8 +2402,8 @@ pub fn menu_tree_named(english_names: bool) -> Vec<(&'static str, Vec<Item>)> {
                         c("Export As PNG…", "file.export.png"),
                         Sep,
                         cp("Export for ScanNCut…", "file.exportAs", json!({"format": "fcm"})),
-                        c("Send to ScanNCut", "document.sendToCutter"),
                         c("Place Mat Scan…", "document.placeMatScan"),
+                        cp("Place Mat Scan with Profile…", "document.placeMatScan", json!({"pickProfile": true})),
                         Sep,
                         c("Save for Web (Legacy)…", "file.saveForWeb"),
                     ],

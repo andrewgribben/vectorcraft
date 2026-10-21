@@ -70,31 +70,6 @@ fn fcm_is_listed_as_a_writable_format() {
     assert!(f.write && !f.read && f.extensions == ["fcm"]);
 }
 
-#[test]
-fn sends_the_file_to_the_machine_drive() {
-    let dir = std::env::temp_dir().join(format!("vc-fcm-drive-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
-    let mut s = session();
-    let r = s.execute("document.sendToCutter", &json!({"volume": dir.to_string_lossy(), "name": "my design!"})).unwrap();
-    let written = dir.join("my_design_.fcm");
-    assert_eq!(r["path"].as_str().unwrap(), written.to_string_lossy());
-    let f = vectorcraft_fcm::fcm_core::parse(&std::fs::read(&written).unwrap()).unwrap();
-    assert_eq!(f.pieces.len(), 1);
-    // a stray missing drive is an error, not a panic
-    assert!(s.execute("document.sendToCutter", &json!({"volume": "/definitely/not/mounted"})).is_err());
-    std::fs::remove_dir_all(&dir).ok();
-}
-
-#[test]
-fn finds_a_drive_named_no_name_under_the_mount_roots() {
-    let root = std::env::temp_dir().join(format!("vc-fcm-roots-{}", std::process::id()));
-    std::fs::create_dir_all(root.join("Other")).unwrap();
-    assert!(super::fcm::find_machine_volume(std::slice::from_ref(&root)).is_none());
-    std::fs::create_dir_all(root.join("NO NAME")).unwrap();
-    assert_eq!(super::fcm::find_machine_volume(std::slice::from_ref(&root)), Some(root.join("NO NAME")));
-    std::fs::remove_dir_all(&root).ok();
-}
-
 /// A flat grey PNG of the given size, written to a temp file.
 fn grey_png(name: &str, w: u32, h: u32) -> std::path::PathBuf {
     let path = std::env::temp_dir().join(format!("vc-matscan-{}-{name}.png", std::process::id()));
@@ -145,4 +120,40 @@ fn a_mat_scan_rejects_bad_input() {
     assert!(s.execute("document.placeMatScan", &json!({"path": p, "matWidthMm": -3})).is_err());
     assert!(s.execute("document.placeMatScan", &json!({"path": "/no/such/scan.jpg"})).is_err());
     std::fs::remove_file(png).ok();
+}
+
+#[test]
+fn a_mat_scan_profile_can_come_from_a_file() {
+    let mm = 72.0 / 25.4;
+    let png = grey_png("d", 600, 800);
+    let file = std::env::temp_dir().join(format!("vc-matscan-{}-profile.json", std::process::id()));
+    std::fs::write(&file, r#"{"pxPerMmX": 10.0, "pxPerMmY": 20.0, "originPxX": -5.0, "originPxY": -10.0}"#).unwrap();
+    let mut s = Session::new();
+    s.execute("file.new", &json!({"width": 100.0, "height": 100.0})).unwrap();
+    let r = s.execute("document.placeMatScan", &json!({"path": png.to_string_lossy(), "profilePath": file.to_string_lossy()})).unwrap();
+    assert!((r["widthMm"].as_f64().unwrap() - 60.0).abs() < 1e-9 && (r["heightMm"].as_f64().unwrap() - 40.0).abs() < 1e-9, "{r}");
+    let st = s.doc().unwrap();
+    let ab = st.doc.artboards[0].rect;
+    let b = st.doc.node(vectorcraft_doc::NodeId(r["id"].as_u64().unwrap())).unwrap().visual_bounds().unwrap();
+    assert!(((b.x0 - ab.x0) / mm - 0.5).abs() < 0.01 && ((b.y0 - ab.y0) / mm - 0.5).abs() < 0.01, "{b:?}");
+    std::fs::remove_file(png).ok();
+    std::fs::remove_file(file).ok();
+}
+
+#[test]
+fn a_bad_mat_scan_profile_file_is_an_error() {
+    let png = grey_png("e", 50, 50);
+    let p = png.to_string_lossy().to_string();
+    let bad_file = std::env::temp_dir().join(format!("vc-matscan-{}-bad.json", std::process::id()));
+    std::fs::write(&bad_file, "not json").unwrap();
+    let zero = std::env::temp_dir().join(format!("vc-matscan-{}-zero.json", std::process::id()));
+    std::fs::write(&zero, r#"{"pxPerMmX": 0}"#).unwrap();
+    let mut s = session();
+    assert!(s.execute("document.placeMatScan", &json!({"path": p, "profilePath": "/no/such/profile.json"})).is_err());
+    assert!(s.execute("document.placeMatScan", &json!({"path": p, "profilePath": bad_file.to_string_lossy()})).is_err());
+    assert!(s.execute("document.placeMatScan", &json!({"path": p, "profilePath": zero.to_string_lossy()})).is_err());
+    assert!(s.execute("document.placeMatScan", &json!({"path": p, "profilePath": zero.to_string_lossy(), "profile": {}})).is_err(), "both given");
+    std::fs::remove_file(png).ok();
+    std::fs::remove_file(bad_file).ok();
+    std::fs::remove_file(zero).ok();
 }
